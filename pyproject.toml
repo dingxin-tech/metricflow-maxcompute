@@ -84,7 +84,7 @@ clickhouse-env-requirements = [
 
 
 [project.urls]
-Documentation = "https://docs.getdbt.com/docs/build/about-metricflow"
+Documentation = "https://github.com/dingxin-tech/metricflow-maxcompute/blob/maxcompute/scripts/maxcompute_trial/QUICKSTART.zh-CN.md"
 "Source Code" = "https://github.com/dingxin-tech/metricflow-maxcompute"
 
 

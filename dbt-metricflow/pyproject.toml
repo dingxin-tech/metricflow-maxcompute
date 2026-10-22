@@ -40,7 +40,7 @@ files = [
 ]
 
 [project.urls]
-"Source Code" = "https://github.com/dingxin-tech/metricflow-maxcompute/tree/main/dbt-metricflow"
+"Source Code" = "https://github.com/dingxin-tech/metricflow-maxcompute/tree/maxcompute/dbt-metricflow"
 
 [project.scripts]
 mf = 'dbt_metricflow.cli.main:cli'
