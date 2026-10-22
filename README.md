@@ -1,3 +1,20 @@
+# MetricFlow for MaxCompute
+
+本仓库是 [dbt-labs/metricflow](https://github.com/dbt-labs/metricflow) 的 MaxCompute 适配 fork，由 dingxin-tech 维护。
+它将 dbt 项目中的指标定义编译为 MaxCompute SQL，通过 dbt-maxcompute 执行。
+
+- [下载试用版](https://github.com/dingxin-tech/metricflow-maxcompute/releases)
+- [中文快速上手](scripts/maxcompute_trial/QUICKSTART.zh-CN.md)
+- [验收记录](scripts/maxcompute_trial/ACCEPTANCE.zh-CN.md)
+- [维护、CI 与发布](docs/maxcompute/MAINTENANCE.zh-CN.md)
+- [问题反馈](https://github.com/dingxin-tech/metricflow-maxcompute/issues)
+
+当前通过独立虚拟环境安装成套 wheel；请勿与官方 metricflow/dbt-metricflow 混装。
+本 fork 不代表 dbt Labs 官方 MaxCompute 支持，也不提供托管语义查询服务。
+上游代码及许可声明保留如下。
+
+---
+
 <p align="center">
   <a target="_blank" href="https://transform.co/metricflow">
     <picture>

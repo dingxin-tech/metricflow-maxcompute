@@ -19,6 +19,7 @@ from metricflow.sql.render.big_query import BigQuerySqlPlanRenderer
 from metricflow.sql.render.clickhouse import ClickHouseSqlPlanRenderer, clickhouse_explain_statement
 from metricflow.sql.render.databricks import DatabricksSqlPlanRenderer
 from metricflow.sql.render.duckdb_renderer import DuckDbSqlPlanRenderer
+from metricflow.sql.render.maxcompute import MaxComputeSqlPlanRenderer
 from metricflow.sql.render.postgres import PostgresSQLSqlPlanRenderer
 from metricflow.sql.render.redshift import RedshiftSqlPlanRenderer
 from metricflow.sql.render.snowflake import SnowflakeSqlPlanRenderer
@@ -54,6 +55,7 @@ class SupportedAdapterTypes(enum.Enum):
     TRINO = "trino"
     VERTICA = "vertica"
     CLICKHOUSE = "clickhouse"
+    MAXCOMPUTE = "maxcompute"
 
     @property
     def sql_engine_type(self) -> SqlEngine:
@@ -78,6 +80,8 @@ class SupportedAdapterTypes(enum.Enum):
             return SqlEngine.VERTICA
         elif self is SupportedAdapterTypes.CLICKHOUSE:
             return SqlEngine.CLICKHOUSE
+        elif self is SupportedAdapterTypes.MAXCOMPUTE:
+            return SqlEngine.MAXCOMPUTE
         else:
             assert_values_exhausted(self)
 
@@ -104,6 +108,8 @@ class SupportedAdapterTypes(enum.Enum):
             return VerticaSqlPlanRenderer()
         elif self is SupportedAdapterTypes.CLICKHOUSE:
             return ClickHouseSqlPlanRenderer()
+        elif self is SupportedAdapterTypes.MAXCOMPUTE:
+            return MaxComputeSqlPlanRenderer()
         else:
             assert_values_exhausted(self)
 

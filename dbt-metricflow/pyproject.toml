@@ -40,12 +40,15 @@ files = [
 ]
 
 [project.urls]
-"Source Code" = "https://github.com/dbt-labs/metricflow/tree/main/dbt-metricflow"
+"Source Code" = "https://github.com/dingxin-tech/metricflow-maxcompute/tree/main/dbt-metricflow"
 
 [project.scripts]
 mf = 'dbt_metricflow.cli.main:cli'
 
 [tool.hatch.metadata.hooks.requirements_txt.optional-dependencies]
+dbt-maxcompute = [
+  "requirements-files/requirements-dbt-maxcompute.txt"
+]
 dbt-bigquery = [
   "requirements-files/requirements-dbt-bigquery.txt"
 ]
@@ -77,7 +80,6 @@ dbt-vertica = [
   "requirements-files/requirements-dbt-vertica.txt"
 ]
 dev-env-requirements = [
-  "../requirements-files/dev-env-requirements.txt",
   "requirements-files/dev-env-requirements.txt"
 ]
 
@@ -88,14 +90,27 @@ description = "Environment for package + CLI development and testing against loc
 run = "run-coverage --no-cov"
 
 features = ["dev-env-requirements"]
-
-# In order to use the local packages we have to do post-installs of editable versions to clobber the package installs.
-# If we do not do this, then the tests will break on broken imports whenever someone moves things around in
-# metricflow or metricflow-semantics between the latest dbt-metricflow release and test runtime.
-# TODO: switch to workspaces if removal of mf (e.g., after integration with dbt-core) will not happen in a timely fashion.
-post-install-commands = [
-  "pip install -e ../",
+pre-install-commands = [
+  "python -m ensurepip --upgrade",
+  "python -m pip install -e ../",
 ]
+
+# Hatch >=1.18 resolves the unpublished local trial from source during development.
+# Runtime wheel metadata retains the portable, exact version requirement.
+[tool.hatch.envs.dev-env.sources]
+metricflow = {path = "..", editable = true}
+
+[tool.hatch.envs.maxcompute-env]
+template = "dev-env"
+features = ["dev-env-requirements", "dbt-maxcompute"]
+
+[tool.hatch.envs.trial-tools]
+template = "maxcompute-env"
+
+[tool.hatch.envs.dev-env.env-vars]
+# Keep development imports current even if an installer re-caches the core wheel.
+# The distributed installer does not set PYTHONPATH and validates site-packages imports.
+PYTHONPATH = "{root:parent}"
 
 
 [tool.hatch.build.targets.sdist]

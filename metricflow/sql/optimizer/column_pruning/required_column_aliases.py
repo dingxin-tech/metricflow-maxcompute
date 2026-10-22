@@ -168,8 +168,13 @@ class SqlMapRequiredColumnAliasesVisitor(SqlPlanNodeVisitor[None]):
         )
 
         if len(required_select_columns_in_this_node) == 0:
-            raise RuntimeError(
-                "No columns are required in this node - this indicates a bug in this visitor or in the inputs."
+            if updated_required_column_aliases_in_this_node or not node.select_columns:
+                raise RuntimeError("Required columns are missing from this SELECT")
+            # SUM(1) / COUNT(*) still need source rows, even without any column dependencies.
+            # Keep a projected column as a row carrier rather than emitting an empty SELECT.
+            required_select_columns_in_this_node = (node.select_columns[0],)
+            self._current_required_column_alias_mapping.add_aliases(
+                node, {required_select_columns_in_this_node[0].column_alias}
             )
         # It's possible for `required_select_columns_in_this_node` to be empty because we traverse through the ancestors
         # of a CTE node whenever a CTE node is updated. See `test_multi_child_pruning`.

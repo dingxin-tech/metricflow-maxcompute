@@ -129,6 +129,7 @@ class DataflowToSqlPlanConverter:
                     nodes_to_convert_to_cte=nodes_to_convert_to_cte,
                     optimizers=option_set.optimizers,
                     output_column_orderer=output_column_orderer,
+                    use_maxcompute_sql=sql_engine_type is SqlEngine.MAXCOMPUTE,
                 )
 
                 if retried_at_lower_optimization_level:
@@ -170,6 +171,7 @@ class DataflowToSqlPlanConverter:
         nodes_to_convert_to_cte: FrozenSet[DataflowPlanNode],
         optimizers: Sequence[SqlPlanOptimizer],
         output_column_orderer: Optional[OutputColumnOrderer] = None,
+        use_maxcompute_sql: bool = False,
     ) -> ConvertToSqlPlanResult:
         """Helper method to convert using specific options. Main use case are tests."""
         logger.debug(
@@ -184,6 +186,7 @@ class DataflowToSqlPlanConverter:
                 column_association_resolver=self.column_association_resolver,
                 semantic_manifest_lookup=self._semantic_manifest_lookup,
                 output_column_orderer=output_column_orderer,
+                use_maxcompute_sql=use_maxcompute_sql,
             )
             data_set = to_sql_subquery_visitor.get_output_data_set(dataflow_plan_node)
         else:
@@ -192,6 +195,7 @@ class DataflowToSqlPlanConverter:
                 semantic_manifest_lookup=self._semantic_manifest_lookup,
                 nodes_to_convert_to_cte=nodes_to_convert_to_cte,
                 output_column_orderer=output_column_orderer,
+                use_maxcompute_sql=use_maxcompute_sql,
             )
             data_set = dataflow_plan_node.accept(to_sql_cte_visitor)
             select_statement = data_set.checked_sql_select_node

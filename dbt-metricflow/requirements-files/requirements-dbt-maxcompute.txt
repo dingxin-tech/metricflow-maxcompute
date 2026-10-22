@@ -1,0 +1,2 @@
+dbt-maxcompute>=1.11.4,<1.12
+pyodps>=0.13.2,<0.14

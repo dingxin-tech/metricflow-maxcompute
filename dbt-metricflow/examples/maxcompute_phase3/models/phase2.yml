@@ -1,0 +1,89 @@
+version: 2
+semantic_models:
+  - name: refunds
+    model: ref('refunds')
+    defaults:
+      agg_time_dimension: refunded_at
+    entities:
+      - name: refund
+        type: primary
+        expr: refund_id
+      - name: customer
+        type: foreign
+        expr: customer_id
+    dimensions:
+      - name: refunded_at
+        type: time
+        type_params:
+          time_granularity: day
+    measures:
+      - name: refund_amount
+        agg: sum
+        expr: refund_amount
+  - name: countries
+    model: ref('countries')
+    entities:
+      - name: country
+        type: primary
+        expr: country_id
+    dimensions:
+      - name: country_name
+        type: categorical
+  - name: partitioned_orders
+    model: ref('partitioned_orders')
+    defaults:
+      agg_time_dimension: ordered_at
+    entities:
+      - name: partitioned_order
+        type: primary
+        expr: order_id
+    dimensions:
+      - name: ordered_at
+        type: time
+        type_params:
+          time_granularity: day
+      - name: ds
+        type: categorical
+        is_partition: true
+    measures:
+      - name: partitioned_revenue
+        agg: sum
+        expr: amount
+      - name: partitioned_count
+        agg: count
+        expr: order_id
+metrics:
+  - name: refund_amount
+    label: Refund amount
+    type: simple
+    type_params:
+      measure: refund_amount
+  - name: net_revenue
+    label: Net revenue
+    type: derived
+    type_params:
+      expr: revenue - refund_amount
+      metrics:
+        - name: revenue
+        - name: refund_amount
+  - name: zero_total
+    label: Zero denominator
+    type: simple
+    type_params:
+      measure: zero_total
+  - name: revenue_per_zero
+    label: Revenue divided by zero
+    type: ratio
+    type_params:
+      numerator: revenue
+      denominator: zero_total
+  - name: partitioned_revenue
+    label: Partitioned revenue
+    type: simple
+    type_params:
+      measure: partitioned_revenue
+  - name: partitioned_count
+    label: Partitioned order count
+    type: simple
+    type_params:
+      measure: partitioned_count

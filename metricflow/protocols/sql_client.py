@@ -28,6 +28,7 @@ class SqlEngine(Enum):
     VERTICA = "Vertica"
     ATHENA = "Athena"
     CLICKHOUSE = "ClickHouse"
+    MAXCOMPUTE = "MaxCompute"
 
     @property
     def unsupported_granularities(self) -> Set[TimeGranularity]:
@@ -58,6 +59,9 @@ class SqlEngine(Enum):
         elif self is SqlEngine.ATHENA:
             return {TimeGranularity.NANOSECOND, TimeGranularity.MICROSECOND}
         elif self is SqlEngine.CLICKHOUSE:
+            return {TimeGranularity.NANOSECOND, TimeGranularity.MICROSECOND}
+        elif self is SqlEngine.MAXCOMPUTE:
+            # DATETRUNC supports millisecond precision, including on TIMESTAMP inputs.
             return {TimeGranularity.NANOSECOND, TimeGranularity.MICROSECOND}
         else:
             assert_values_exhausted(self)

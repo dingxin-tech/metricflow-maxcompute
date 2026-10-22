@@ -1,0 +1,123 @@
+name: MaxCompute trial
+
+on:
+  push:
+    branches: [maxcompute]
+  pull_request:
+    branches: [maxcompute]
+  workflow_dispatch:
+    inputs:
+      live:
+        description: Run cloud acceptance using the maxcompute environment secrets
+        type: boolean
+        default: false
+      publish:
+        description: Publish a prerelease after cloud acceptance (requires live)
+        type: boolean
+        default: false
+      tag:
+        description: Unique release tag, for example maxcompute-trial-20261022.2
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maxcompute-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Install build and development environment manager
+        run: pipx install hatch==1.18.1
+      - name: Install query plan graph renderer
+        run: sudo apt-get update && sudo apt-get install -y graphviz
+      - name: Validate release inputs
+        env:
+          PUBLISH: ${{ inputs.publish }}
+          LIVE: ${{ inputs.live }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [ "$PUBLISH" = true ]; then
+            test "$LIVE" = true
+            [[ "$TAG" =~ ^maxcompute-trial-[0-9]{8}\.[0-9]+$ ]]
+          fi
+      - name: Lint and typecheck
+        run: make lint
+      - name: Core and CLI regression
+        run: |
+          make test PARALLELISM=2
+          cd dbt-metricflow
+          hatch run maxcompute-env:pytest tests_dbt_metricflow -q
+      - name: Build paired wheels and source archives
+        run: python scripts/maxcompute_trial/build.py --output "$RUNNER_TEMP/delivery/metricflow-maxcompute-trial"
+      - name: Install outside source checkout
+        working-directory: ${{ runner.temp }}
+        run: |
+          unset PYTHONPATH PYTHONHOME
+          python delivery/metricflow-maxcompute-trial/install.py --venv "$RUNNER_TEMP/consumer"
+          "$RUNNER_TEMP/consumer/bin/mf" --version
+          "$RUNNER_TEMP/consumer/bin/dbt" --version
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: maxcompute-trial
+          path: ${{ runner.temp }}/delivery/*.tar.gz*
+          if-no-files-found: error
+          retention-days: 30
+
+  cloud:
+    if: github.event_name == 'workflow_dispatch' && inputs.live && github.ref == 'refs/heads/maxcompute'
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: maxcompute
+    steps:
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: maxcompute-trial
+      - name: Install exact CI artifact
+        run: |
+          sha256sum --check metricflow-maxcompute-trial.tar.gz.sha256
+          tar -xzf metricflow-maxcompute-trial.tar.gz
+          python metricflow-maxcompute-trial/install.py --venv "$RUNNER_TEMP/consumer"
+      - name: Real dbt and mf cloud acceptance
+        env:
+          MAXCOMPUTE_PROJECT: ${{ secrets.MAXCOMPUTE_PROJECT }}
+          MAXCOMPUTE_ENDPOINT: ${{ secrets.MAXCOMPUTE_ENDPOINT }}
+          MAXCOMPUTE_SCHEMA: ${{ vars.MAXCOMPUTE_SCHEMA || 'default' }}
+          ALIBABA_CLOUD_ACCESS_KEY_ID: ${{ secrets.ALIBABA_CLOUD_ACCESS_KEY_ID }}
+          ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${{ secrets.ALIBABA_CLOUD_ACCESS_KEY_SECRET }}
+        run: |
+          unset PYTHONPATH PYTHONHOME
+          "$RUNNER_TEMP/consumer/bin/python" -I metricflow-maxcompute-trial/verify_cli.py --live --output-root "$RUNNER_TEMP/cloud-evidence"
+      # Raw warehouse logs remain private to the runner; publish only reviewed summaries.
+
+  release:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/maxcompute'
+    needs: [validate, cloud]
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: maxcompute-trial
+          path: delivery
+      - name: Publish tested artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          gh release create "$RELEASE_TAG" delivery/*.tar.gz* --target "$GITHUB_SHA" --prerelease --title "$RELEASE_TAG" --notes-file docs/maxcompute/RELEASE.zh-CN.md

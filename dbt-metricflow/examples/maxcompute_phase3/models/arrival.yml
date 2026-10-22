@@ -1,0 +1,79 @@
+version: 2
+semantic_models:
+  - name: arrival_orders
+    model: ref('arrival_orders')
+    config:
+      meta:
+        maxcompute_partition_mapping:
+          time_dimension: ordered_at
+          partition_dimension: ds
+          time_zone: UTC
+          partition_time_zone: Asia/Shanghai
+          max_early_arrival_seconds: 32400
+          max_lateness_seconds: 86400
+          partition_format: yyyy-mm-dd
+    defaults:
+      agg_time_dimension: ordered_at
+    entities:
+      - name: arrival_order
+        type: primary
+        expr: order_id
+    dimensions:
+      - name: ordered_at
+        type: time
+        type_params:
+          time_granularity: day
+      - name: ds
+        type: categorical
+        is_partition: true
+    measures:
+      - name: arrival_revenue
+        agg: sum
+        expr: amount
+      - name: arrival_count
+        agg: count
+        expr: order_id
+  - name: unpruned_orders
+    model: ref('arrival_orders')
+    defaults:
+      agg_time_dimension: ordered_at
+    entities:
+      - name: unpruned_order
+        type: primary
+        expr: order_id
+    dimensions:
+      - name: ordered_at
+        type: time
+        type_params:
+          time_granularity: day
+      - name: ds
+        type: categorical
+        is_partition: true
+    measures:
+      - name: unpruned_revenue
+        agg: sum
+        expr: amount
+      - name: unpruned_count
+        agg: count
+        expr: order_id
+metrics:
+  - name: arrival_revenue
+    label: Arrival revenue
+    type: simple
+    type_params:
+      measure: arrival_revenue
+  - name: arrival_count
+    label: Arrival count
+    type: simple
+    type_params:
+      measure: arrival_count
+  - name: unpruned_revenue
+    label: Control revenue
+    type: simple
+    type_params:
+      measure: unpruned_revenue
+  - name: unpruned_count
+    label: Control count
+    type: simple
+    type_params:
+      measure: unpruned_count

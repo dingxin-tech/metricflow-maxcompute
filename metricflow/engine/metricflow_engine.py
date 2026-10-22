@@ -70,7 +70,7 @@ from metricflow.plan_conversion.to_sql_plan.output_column_orderer import (
     OutputColumnOrderer,
     TypeGroupedOrderer,
 )
-from metricflow.protocols.sql_client import SqlClient
+from metricflow.protocols.sql_client import SqlClient, SqlEngine
 from metricflow.sql.optimizer.optimization_levels import SqlOptimizationLevel
 from metricflow.telemetry.models import TelemetryLevel
 from metricflow.telemetry.reporter import TelemetryReporter, log_call
@@ -481,6 +481,7 @@ class MetricFlowEngine(AbstractMetricFlowEngine):
         converter = SemanticModelToDataSetConverter(
             column_association_resolver=self._column_association_resolver,
             manifest_lookup=self._semantic_manifest_lookup,
+            cast_time_to_timestamp=sql_client.sql_engine_type is SqlEngine.MAXCOMPUTE,
         )
         model_lookup = semantic_manifest_lookup.semantic_model_lookup
         for model_reference, semantic_model in model_lookup.model_reference_to_model.items():
@@ -491,6 +492,7 @@ class MetricFlowEngine(AbstractMetricFlowEngine):
         source_node_builder = SourceNodeBuilder(
             column_association_resolver=self._column_association_resolver,
             semantic_manifest_lookup=self._semantic_manifest_lookup,
+            cast_time_to_timestamp=sql_client.sql_engine_type is SqlEngine.MAXCOMPUTE,
         )
         source_node_set = source_node_builder.create_from_data_sets(self._source_data_sets)
 

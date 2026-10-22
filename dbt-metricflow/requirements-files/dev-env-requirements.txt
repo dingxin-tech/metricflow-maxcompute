@@ -1,1 +1,2 @@
+metricflow[dev-env-requirements]==0.214.0.dev0+maxcompute.2
 dbt-duckdb>=1.8.0, <1.9.0

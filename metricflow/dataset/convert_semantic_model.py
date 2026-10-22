@@ -25,6 +25,7 @@ from metricflow_semantics.specs.entity_spec import EntitySpec
 from metricflow_semantics.specs.simple_metric_input_spec import SimpleMetricInputSpec
 from metricflow_semantics.specs.time_dimension_spec import DEFAULT_TIME_GRANULARITY, TimeDimensionSpec
 from metricflow_semantics.sql.sql_exprs import (
+    SqlCastToTimestampExpression,
     SqlColumnReference,
     SqlColumnReferenceExpression,
     SqlDateTruncExpression,
@@ -82,9 +83,11 @@ class SemanticModelToDataSetConverter:
         self,
         column_association_resolver: ColumnAssociationResolver,
         manifest_lookup: SemanticManifestLookup,
+        cast_time_to_timestamp: bool = False,
     ) -> None:
         self._column_association_resolver = column_association_resolver
         self._manifest_lookup = manifest_lookup
+        self._cast_time_to_timestamp = cast_time_to_timestamp
         self._manifest_object_lookup = manifest_lookup.manifest_object_lookup
 
     def _create_dimension_instance(
@@ -294,6 +297,10 @@ class SemanticModelToDataSetConverter:
         """
         time_dimension_instances: List[TimeDimensionInstance] = []
         select_columns: List[SqlSelectColumn] = []
+
+        if self._cast_time_to_timestamp:
+            # MaxCompute does not compare DATE and TIMESTAMP implicitly, including SCD validity bounds.
+            dimension_select_expr = SqlCastToTimestampExpression.create(dimension_select_expr)
 
         defined_time_granularity = DEFAULT_TIME_GRANULARITY
         if dimension.type_params and dimension.type_params.time_granularity:
@@ -548,9 +555,11 @@ class SemanticModelToDataSetConverter:
             time_granularity=ExpandedTimeGranularity.from_time_granularity(base_granularity),
         )
         time_dimension_instances.append(base_time_dimension_instance)
-        base_dimension_select_expr = SqlColumnReferenceExpression.from_column_reference(
+        base_dimension_select_expr: SqlExpressionNode = SqlColumnReferenceExpression.from_column_reference(
             table_alias=from_source_alias, column_name=base_column_name
         )
+        if self._cast_time_to_timestamp:
+            base_dimension_select_expr = SqlCastToTimestampExpression.create(base_dimension_select_expr)
         base_select_column = SqlSelectColumn(
             expr=base_dimension_select_expr, column_alias=base_time_dimension_instance.associated_column.column_name
         )

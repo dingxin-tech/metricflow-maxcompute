@@ -1,0 +1,849 @@
+[
+  {
+    "name": "single_table",
+    "metrics": [
+      "revenue",
+      "order_count",
+      "customer_count",
+      "average_order_value"
+    ],
+    "group_by": [],
+    "expected": [
+      {
+        "revenue": 100,
+        "order_count": 6,
+        "customer_count": 3,
+        "average_order_value": 16.666666666666668
+      }
+    ],
+    "start_time": null
+  },
+  {
+    "name": "daily",
+    "metrics": [
+      "revenue",
+      "order_count"
+    ],
+    "group_by": [
+      "metric_time__day"
+    ],
+    "expected": [
+      {
+        "metric_time__day": "2026-01-31",
+        "revenue": 10,
+        "order_count": 1
+      },
+      {
+        "metric_time__day": "2026-02-01",
+        "revenue": 50,
+        "order_count": 2
+      },
+      {
+        "metric_time__day": "2026-02-02",
+        "revenue": 40,
+        "order_count": 1
+      },
+      {
+        "metric_time__day": "2026-02-03",
+        "revenue": 0,
+        "order_count": 2
+      }
+    ],
+    "start_time": null
+  },
+  {
+    "name": "monthly",
+    "metrics": [
+      "revenue",
+      "order_count"
+    ],
+    "group_by": [
+      "metric_time__month"
+    ],
+    "expected": [
+      {
+        "metric_time__month": "2026-01-01",
+        "revenue": 10,
+        "order_count": 1
+      },
+      {
+        "metric_time__month": "2026-02-01",
+        "revenue": 90,
+        "order_count": 5
+      }
+    ],
+    "start_time": null
+  },
+  {
+    "name": "weekly",
+    "metrics": [
+      "revenue",
+      "order_count"
+    ],
+    "group_by": [
+      "metric_time__week"
+    ],
+    "expected": [
+      {
+        "metric_time__week": "2026-01-26",
+        "revenue": 60,
+        "order_count": 3
+      },
+      {
+        "metric_time__week": "2026-02-02",
+        "revenue": 40,
+        "order_count": 3
+      }
+    ],
+    "start_time": null
+  },
+  {
+    "name": "dimension_join",
+    "metrics": [
+      "revenue",
+      "order_count"
+    ],
+    "group_by": [
+      "customer__region"
+    ],
+    "expected": [
+      {
+        "customer__region": "east",
+        "revenue": 30,
+        "order_count": 2
+      },
+      {
+        "customer__region": "west",
+        "revenue": 30,
+        "order_count": 2
+      },
+      {
+        "customer__region": null,
+        "revenue": 40,
+        "order_count": 2
+      }
+    ],
+    "start_time": null
+  },
+  {
+    "name": "month_and_region",
+    "metrics": [
+      "revenue",
+      "order_count"
+    ],
+    "group_by": [
+      "metric_time__month",
+      "customer__region"
+    ],
+    "expected": [
+      {
+        "metric_time__month": "2026-01-01",
+        "customer__region": "east",
+        "revenue": 10,
+        "order_count": 1
+      },
+      {
+        "metric_time__month": "2026-02-01",
+        "customer__region": "east",
+        "revenue": 20,
+        "order_count": 1
+      },
+      {
+        "metric_time__month": "2026-02-01",
+        "customer__region": "west",
+        "revenue": 30,
+        "order_count": 2
+      },
+      {
+        "metric_time__month": "2026-02-01",
+        "customer__region": null,
+        "revenue": 40,
+        "order_count": 2
+      }
+    ],
+    "start_time": null
+  },
+  {
+    "name": "time_filter",
+    "metrics": [
+      "revenue",
+      "order_count"
+    ],
+    "group_by": [],
+    "expected": [
+      {
+        "revenue": 40,
+        "order_count": 3
+      }
+    ],
+    "start_time": "2026-02-02"
+  },
+  {
+    "name": "cross_fact_totals",
+    "metrics": [
+      "revenue",
+      "refund_amount",
+      "net_revenue"
+    ],
+    "group_by": [],
+    "expected": [
+      {
+        "revenue": 100,
+        "refund_amount": 22,
+        "net_revenue": 78
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "cross_fact_daily",
+    "metrics": [
+      "revenue",
+      "refund_amount"
+    ],
+    "group_by": [
+      "metric_time__day"
+    ],
+    "expected": [
+      {
+        "metric_time__day": "2026-01-31",
+        "revenue": 10,
+        "refund_amount": 2
+      },
+      {
+        "metric_time__day": "2026-02-01",
+        "revenue": 50,
+        "refund_amount": 4
+      },
+      {
+        "metric_time__day": "2026-02-02",
+        "revenue": 40,
+        "refund_amount": 11
+      },
+      {
+        "metric_time__day": "2026-02-03",
+        "revenue": 0,
+        "refund_amount": null
+      },
+      {
+        "metric_time__day": "2026-02-04",
+        "revenue": null,
+        "refund_amount": 5
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "cross_fact_null_region",
+    "metrics": [
+      "revenue",
+      "refund_amount"
+    ],
+    "group_by": [
+      "customer__region"
+    ],
+    "expected": [
+      {
+        "customer__region": "east",
+        "revenue": 30,
+        "refund_amount": 6
+      },
+      {
+        "customer__region": "west",
+        "revenue": 30,
+        "refund_amount": 3
+      },
+      {
+        "customer__region": null,
+        "revenue": 40,
+        "refund_amount": 8
+      },
+      {
+        "customer__region": "unused",
+        "revenue": null,
+        "refund_amount": 5
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "derived_null_region",
+    "metrics": [
+      "net_revenue"
+    ],
+    "group_by": [
+      "customer__region"
+    ],
+    "expected": [
+      {
+        "customer__region": "east",
+        "net_revenue": 24
+      },
+      {
+        "customer__region": "west",
+        "net_revenue": 27
+      },
+      {
+        "customer__region": null,
+        "net_revenue": 32
+      },
+      {
+        "customer__region": "unused",
+        "net_revenue": null
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "two_hop_dimension",
+    "metrics": [
+      "revenue",
+      "order_count"
+    ],
+    "group_by": [
+      "customer__country__country_name"
+    ],
+    "expected": [
+      {
+        "customer__country__country_name": "eastland",
+        "revenue": 30,
+        "order_count": 2
+      },
+      {
+        "customer__country__country_name": "westland",
+        "revenue": 30,
+        "order_count": 2
+      },
+      {
+        "customer__country__country_name": null,
+        "revenue": 40,
+        "order_count": 2
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "cross_fact_two_hop",
+    "metrics": [
+      "revenue",
+      "refund_amount"
+    ],
+    "group_by": [
+      "customer__country__country_name"
+    ],
+    "expected": [
+      {
+        "customer__country__country_name": "eastland",
+        "revenue": 30,
+        "refund_amount": 6
+      },
+      {
+        "customer__country__country_name": "westland",
+        "revenue": 30,
+        "refund_amount": 3
+      },
+      {
+        "customer__country__country_name": null,
+        "revenue": 40,
+        "refund_amount": 13
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "zero_denominator",
+    "metrics": [
+      "revenue_per_zero"
+    ],
+    "group_by": [],
+    "expected": [
+      {
+        "revenue_per_zero": null
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "partition_time_only",
+    "metrics": [
+      "partitioned_revenue",
+      "partitioned_count"
+    ],
+    "group_by": [],
+    "expected": [
+      {
+        "partitioned_revenue": 40,
+        "partitioned_count": 1
+      }
+    ],
+    "start_time": "2026-02-02T00:00:00",
+    "end_time": "2026-02-02T23:59:59",
+    "where": [],
+    "capture_warehouse_plan": true,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "partition_explicit_filter",
+    "metrics": [
+      "partitioned_revenue",
+      "partitioned_count"
+    ],
+    "group_by": [],
+    "expected": [
+      {
+        "partitioned_revenue": 40,
+        "partitioned_count": 1
+      }
+    ],
+    "start_time": "2026-02-02T00:00:00",
+    "end_time": "2026-02-02T23:59:59",
+    "where": [
+      "{{ Dimension('partitioned_order__ds') }} = '2026-02-02'"
+    ],
+    "capture_warehouse_plan": true,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "aggregate_statistics",
+    "metrics": [
+      "amount_avg",
+      "amount_min",
+      "amount_max",
+      "amount_median",
+      "amount_p90",
+      "amount_disc90",
+      "amount_approx_median",
+      "positive_orders"
+    ],
+    "group_by": [],
+    "expected": [
+      {
+        "amount_avg": 20,
+        "amount_min": 0,
+        "amount_max": 40,
+        "amount_median": 20,
+        "amount_p90": 36,
+        "amount_disc90": 40,
+        "amount_approx_median": 20,
+        "positive_orders": 4
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "percentile_by_region",
+    "metrics": [
+      "amount_median"
+    ],
+    "group_by": [
+      "customer__region"
+    ],
+    "expected": [
+      {
+        "customer__region": "east",
+        "amount_median": 15
+      },
+      {
+        "customer__region": "west",
+        "amount_median": 30
+      },
+      {
+        "customer__region": null,
+        "amount_median": 20
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "arrival_pruned",
+    "metrics": [
+      "arrival_revenue",
+      "arrival_count"
+    ],
+    "group_by": [],
+    "expected": [
+      {
+        "arrival_revenue": 90,
+        "arrival_count": 3
+      }
+    ],
+    "start_time": "2026-02-02T00:00:00",
+    "end_time": "2026-02-02T00:00:00",
+    "where": [],
+    "capture_warehouse_plan": true,
+    "expected_scan_partitions": [
+      "2026-02-01",
+      "2026-02-02",
+      "2026-02-03",
+      "2026-02-04"
+    ]
+  },
+  {
+    "name": "arrival_control",
+    "metrics": [
+      "unpruned_revenue",
+      "unpruned_count"
+    ],
+    "group_by": [],
+    "expected": [
+      {
+        "unpruned_revenue": 90,
+        "unpruned_count": 3
+      }
+    ],
+    "start_time": "2026-02-02T00:00:00",
+    "end_time": "2026-02-02T00:00:00",
+    "where": [],
+    "capture_warehouse_plan": true,
+    "expected_scan_partitions": [
+      "2026-01-31",
+      "2026-02-01",
+      "2026-02-02",
+      "2026-02-03",
+      "2026-02-04",
+      "2026-02-05",
+      "2026-02-07"
+    ]
+  },
+  {
+    "name": "arrival_no_time_filter",
+    "metrics": [
+      "arrival_revenue",
+      "arrival_count"
+    ],
+    "group_by": [],
+    "expected": [
+      {
+        "arrival_revenue": 360,
+        "arrival_count": 8
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": true,
+    "expected_scan_partitions": [
+      "2026-01-31",
+      "2026-02-01",
+      "2026-02-02",
+      "2026-02-03",
+      "2026-02-04",
+      "2026-02-05",
+      "2026-02-07"
+    ]
+  },
+  {
+    "name": "cumulative_daily",
+    "metrics": [
+      "revenue_cumulative"
+    ],
+    "group_by": [
+      "metric_time__day"
+    ],
+    "expected": [
+      {
+        "metric_time__day": "2026-01-31",
+        "revenue_cumulative": 10
+      },
+      {
+        "metric_time__day": "2026-02-01",
+        "revenue_cumulative": 60
+      },
+      {
+        "metric_time__day": "2026-02-02",
+        "revenue_cumulative": 100
+      },
+      {
+        "metric_time__day": "2026-02-03",
+        "revenue_cumulative": 100
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "rolling_daily",
+    "metrics": [
+      "revenue_2day"
+    ],
+    "group_by": [
+      "metric_time__day"
+    ],
+    "expected": [
+      {
+        "metric_time__day": "2026-01-31",
+        "revenue_2day": 10
+      },
+      {
+        "metric_time__day": "2026-02-01",
+        "revenue_2day": 60
+      },
+      {
+        "metric_time__day": "2026-02-02",
+        "revenue_2day": 90
+      },
+      {
+        "metric_time__day": "2026-02-03",
+        "revenue_2day": 40
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "mtd_daily",
+    "metrics": [
+      "revenue_mtd"
+    ],
+    "group_by": [
+      "metric_time__day"
+    ],
+    "expected": [
+      {
+        "metric_time__day": "2026-01-31",
+        "revenue_mtd": 10
+      },
+      {
+        "metric_time__day": "2026-02-01",
+        "revenue_mtd": 50
+      },
+      {
+        "metric_time__day": "2026-02-02",
+        "revenue_mtd": 90
+      },
+      {
+        "metric_time__day": "2026-02-03",
+        "revenue_mtd": 90
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "previous_day",
+    "metrics": [
+      "previous_revenue"
+    ],
+    "group_by": [
+      "metric_time__day"
+    ],
+    "expected": [
+      {
+        "metric_time__day": "2026-02-01",
+        "previous_revenue": 10
+      },
+      {
+        "metric_time__day": "2026-02-02",
+        "previous_revenue": 50
+      },
+      {
+        "metric_time__day": "2026-02-03",
+        "previous_revenue": 40
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "rolling_pruned",
+    "metrics": [
+      "arrival_2day"
+    ],
+    "group_by": [
+      "metric_time__day"
+    ],
+    "expected": [
+      {
+        "metric_time__day": "2026-02-03",
+        "arrival_2day": 140
+      }
+    ],
+    "start_time": "2026-02-03T00:00:00",
+    "end_time": "2026-02-03T00:00:00",
+    "where": [],
+    "capture_warehouse_plan": true,
+    "expected_scan_partitions": [
+      "2026-01-31",
+      "2026-02-01",
+      "2026-02-02",
+      "2026-02-03",
+      "2026-02-04",
+      "2026-02-05"
+    ]
+  },
+  {
+    "name": "rolling_control",
+    "metrics": [
+      "unpruned_2day"
+    ],
+    "group_by": [
+      "metric_time__day"
+    ],
+    "expected": [
+      {
+        "metric_time__day": "2026-02-03",
+        "unpruned_2day": 140
+      }
+    ],
+    "start_time": "2026-02-03T00:00:00",
+    "end_time": "2026-02-03T00:00:00",
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "conversion_totals",
+    "metrics": [
+      "purchase_conversions",
+      "purchase_conversion_rate"
+    ],
+    "group_by": [],
+    "expected": [
+      {
+        "purchase_conversions": 3,
+        "purchase_conversion_rate": 0.6
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "conversion_daily",
+    "metrics": [
+      "purchase_conversions",
+      "purchase_conversion_rate"
+    ],
+    "group_by": [
+      "metric_time__day"
+    ],
+    "expected": [
+      {
+        "metric_time__day": "2026-01-31",
+        "purchase_conversions": null,
+        "purchase_conversion_rate": null
+      },
+      {
+        "metric_time__day": "2026-02-01",
+        "purchase_conversions": 3,
+        "purchase_conversion_rate": 1
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "conversion_filtered",
+    "metrics": [
+      "purchase_conversions",
+      "purchase_conversion_rate"
+    ],
+    "group_by": [],
+    "expected": [
+      {
+        "purchase_conversions": 3,
+        "purchase_conversion_rate": 1
+      }
+    ],
+    "start_time": "2026-02-01T00:00:00",
+    "end_time": "2026-02-01T00:00:00",
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  },
+  {
+    "name": "scd_tier",
+    "metrics": [
+      "revenue",
+      "order_count"
+    ],
+    "group_by": [
+      "customer__tier"
+    ],
+    "expected": [
+      {
+        "customer__tier": "legacy",
+        "revenue": 10,
+        "order_count": 1
+      },
+      {
+        "customer__tier": "gold",
+        "revenue": 20,
+        "order_count": 1
+      },
+      {
+        "customer__tier": "bronze",
+        "revenue": 30,
+        "order_count": 1
+      },
+      {
+        "customer__tier": "silver",
+        "revenue": null,
+        "order_count": 1
+      },
+      {
+        "customer__tier": null,
+        "revenue": 40,
+        "order_count": 2
+      }
+    ],
+    "start_time": null,
+    "end_time": null,
+    "where": [],
+    "capture_warehouse_plan": false,
+    "expected_scan_partitions": null
+  }
+]

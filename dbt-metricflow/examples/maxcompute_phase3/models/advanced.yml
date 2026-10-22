@@ -1,0 +1,167 @@
+version: 2
+semantic_models:
+  - name: customer_history
+    model: ref('customer_history')
+    primary_entity: customer
+    entities:
+      - name: customer
+        type: natural
+        expr: customer_id
+    dimensions:
+      - name: tier
+        type: categorical
+      - name: valid_from
+        type: time
+        type_params:
+          time_granularity: day
+          validity_params:
+            is_start: true
+      - name: valid_to
+        type: time
+        type_params:
+          time_granularity: day
+          validity_params:
+            is_end: true
+  - name: visits
+    model: ref('visits')
+    defaults:
+      agg_time_dimension: visited_at
+    entities:
+      - name: visitor
+        type: foreign
+        expr: visitor_id
+      - name: visit
+        type: primary
+        expr: visit_id
+    dimensions:
+      - name: visited_at
+        type: time
+        type_params:
+          time_granularity: day
+    measures:
+      - name: visits
+        agg: sum
+        expr: '1'
+  - name: purchases
+    model: ref('purchases')
+    defaults:
+      agg_time_dimension: purchased_at
+    entities:
+      - name: visitor
+        type: foreign
+        expr: visitor_id
+      - name: purchase
+        type: primary
+        expr: purchase_id
+    dimensions:
+      - name: purchased_at
+        type: time
+        type_params:
+          time_granularity: day
+    measures:
+      - name: purchases
+        agg: sum
+        expr: '1'
+metrics:
+  - name: amount_avg
+    label: Average amount
+    type: simple
+    type_params:
+      measure: amount_avg
+  - name: amount_min
+    label: Minimum amount
+    type: simple
+    type_params:
+      measure: amount_min
+  - name: amount_max
+    label: Maximum amount
+    type: simple
+    type_params:
+      measure: amount_max
+  - name: amount_median
+    label: Median amount
+    type: simple
+    type_params:
+      measure: amount_median
+  - name: amount_p90
+    label: Continuous p90
+    type: simple
+    type_params:
+      measure: amount_p90
+  - name: amount_disc90
+    label: Discrete p90
+    type: simple
+    type_params:
+      measure: amount_disc90
+  - name: amount_approx_median
+    label: Approximate median
+    type: simple
+    type_params:
+      measure: amount_approx_median
+  - name: positive_orders
+    label: Positive orders
+    type: simple
+    type_params:
+      measure: positive_orders
+  - name: revenue_cumulative
+    label: Cumulative revenue
+    type: cumulative
+    type_params:
+      measure: revenue
+  - name: revenue_2day
+    label: Trailing two day revenue
+    type: cumulative
+    type_params:
+      measure: revenue
+      cumulative_type_params:
+        window: 2 days
+  - name: revenue_mtd
+    label: Month to date revenue
+    type: cumulative
+    type_params:
+      measure: revenue
+      cumulative_type_params:
+        grain_to_date: month
+  - name: previous_revenue
+    label: Previous day revenue
+    type: derived
+    type_params:
+      expr: previous
+      metrics:
+        - name: revenue
+          alias: previous
+          offset_window: 1 day
+  - name: arrival_2day
+    label: Arrival trailing two days
+    type: cumulative
+    type_params:
+      measure: arrival_revenue
+      cumulative_type_params:
+        window: 2 days
+  - name: unpruned_2day
+    label: Control trailing two days
+    type: cumulative
+    type_params:
+      measure: unpruned_revenue
+      cumulative_type_params:
+        window: 2 days
+  - name: purchase_conversions
+    label: Purchases attributed to latest visit within two days
+    type: conversion
+    type_params:
+      conversion_type_params:
+        base_measure: visits
+        conversion_measure: purchases
+        window: 2 days
+        entity: visitor
+        calculation: conversions
+  - name: purchase_conversion_rate
+    label: Purchase conversion rate
+    type: conversion
+    type_params:
+      conversion_type_params:
+        base_measure: visits
+        conversion_measure: purchases
+        window: 2 days
+        entity: visitor
+        calculation: conversion_rate

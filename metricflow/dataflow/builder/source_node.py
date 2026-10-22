@@ -62,9 +62,12 @@ class SourceNodeBuilder:
         self,
         column_association_resolver: ColumnAssociationResolver,
         semantic_manifest_lookup: SemanticManifestLookup,
+        cast_time_to_timestamp: bool = False,
     ) -> None:
         self._semantic_manifest_lookup = semantic_manifest_lookup
-        data_set_converter = SemanticModelToDataSetConverter(column_association_resolver, semantic_manifest_lookup)
+        data_set_converter = SemanticModelToDataSetConverter(
+            column_association_resolver, semantic_manifest_lookup, cast_time_to_timestamp=cast_time_to_timestamp
+        )
         self.time_spine_sources = TimeSpineSource.build_standard_time_spine_sources(
             semantic_manifest_lookup.semantic_manifest
         )

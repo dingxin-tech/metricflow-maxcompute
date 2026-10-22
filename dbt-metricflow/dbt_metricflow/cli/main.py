@@ -63,8 +63,9 @@ def cli(cfg: CLIConfiguration, verbose: bool) -> None:  # noqa: D103
 
     cfg.verbose = verbose
 
-    checker = UpdateChecker()
-    result = checker.check(PACKAGE_NAME, pkg_version(PACKAGE_NAME))
+    installed_version = pkg_version(PACKAGE_NAME)
+    # This separately distributed trial must not recommend replacing itself with an upstream wheel.
+    result = None if "+maxcompute." in installed_version else UpdateChecker().check(PACKAGE_NAME, installed_version)
     # result is None when an update was not found or a failure occurred
     if result:
         click.secho(

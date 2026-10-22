@@ -85,7 +85,7 @@ clickhouse-env-requirements = [
 
 [project.urls]
 Documentation = "https://docs.getdbt.com/docs/build/about-metricflow"
-"Source Code" = "https://github.com/dbt-labs/metricflow"
+"Source Code" = "https://github.com/dingxin-tech/metricflow-maxcompute"
 
 
 # There are files that hatch will always include as well (e.g. the LICENSE file).

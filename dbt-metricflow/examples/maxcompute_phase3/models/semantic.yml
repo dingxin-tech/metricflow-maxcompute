@@ -1,0 +1,109 @@
+version: 2
+
+models:
+  - name: time_spine
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        granularity: day
+
+# Keep the v1.11-compatible specification so the example works across the CLI's
+# supported dbt-core range (>=1.11,<1.13). The manifest parser normalizes it.
+semantic_models:
+  - name: orders
+    model: ref('orders')
+    defaults:
+      agg_time_dimension: ordered_at
+    entities:
+      - name: order
+        type: primary
+        expr: order_id
+      - name: customer
+        type: foreign
+        expr: customer_id
+    dimensions:
+      - name: ordered_at
+        type: time
+        type_params:
+          time_granularity: day
+    measures:
+      - name: revenue
+        agg: sum
+        expr: amount
+      - name: order_count
+        agg: count
+        expr: order_id
+      - name: zero_total
+        agg: sum
+        expr: "0"
+      - name: customer_count
+        agg: count_distinct
+        expr: customer_id
+      - name: amount_avg
+        agg: average
+        expr: amount
+      - name: amount_min
+        agg: min
+        expr: amount
+      - name: amount_max
+        agg: max
+        expr: amount
+      - name: amount_median
+        agg: median
+        expr: amount
+      - name: amount_p90
+        agg: percentile
+        expr: amount
+        agg_params:
+          percentile: 0.9
+      - name: amount_disc90
+        agg: percentile
+        expr: amount
+        agg_params:
+          percentile: 0.9
+          use_discrete_percentile: true
+      - name: amount_approx_median
+        agg: percentile
+        expr: amount
+        agg_params:
+          percentile: 0.5
+          use_approximate_percentile: true
+      - name: positive_orders
+        agg: sum_boolean
+        expr: amount > 0
+  - name: customers
+    model: ref('customers')
+    entities:
+      - name: customer
+        type: primary
+        expr: customer_id
+      - name: country
+        type: foreign
+        expr: country_id
+    dimensions:
+      - name: region
+        type: categorical
+
+metrics:
+  - name: revenue
+    label: Revenue
+    type: simple
+    type_params:
+      measure: revenue
+  - name: order_count
+    label: Orders
+    type: simple
+    type_params:
+      measure: order_count
+  - name: customer_count
+    label: Customers
+    type: simple
+    type_params:
+      measure: customer_count
+  - name: average_order_value
+    label: Average order value
+    type: ratio
+    type_params:
+      numerator: revenue
+      denominator: order_count

@@ -93,11 +93,13 @@ class DataflowNodeToSqlCteVisitor(DataflowNodeToSqlSubqueryVisitor):
         semantic_manifest_lookup: SemanticManifestLookup,
         nodes_to_convert_to_cte: FrozenSet[DataflowPlanNode],
         output_column_orderer: Optional[OutputColumnOrderer] = None,
+        use_maxcompute_sql: bool = False,
     ) -> None:
         super().__init__(
             column_association_resolver=column_association_resolver,
             semantic_manifest_lookup=semantic_manifest_lookup,
             output_column_orderer=output_column_orderer,
+            use_maxcompute_sql=use_maxcompute_sql,
         )
         self._nodes_to_convert_to_cte = nodes_to_convert_to_cte
 

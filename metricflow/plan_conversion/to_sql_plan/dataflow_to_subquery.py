@@ -38,6 +38,7 @@ from metricflow_semantics.sql.sql_exprs import (
     SqlArithmeticOperator,
     SqlBetweenExpression,
     SqlCaseExpression,
+    SqlCastToTimestampExpression,
     SqlColumnReference,
     SqlColumnReferenceExpression,
     SqlComparison,
@@ -163,6 +164,7 @@ class DataflowNodeToSqlSubqueryVisitor(DataflowPlanNodeVisitor[SqlDataSet]):
         semantic_manifest_lookup: SemanticManifestLookup,
         output_column_orderer: Optional[OutputColumnOrderer] = None,
         _node_to_output_data_set: Optional[Dict[DataflowPlanNode, SqlDataSet]] = None,
+        use_maxcompute_sql: bool = False,
     ) -> None:
         """Initializer.
 
@@ -184,6 +186,7 @@ class DataflowNodeToSqlSubqueryVisitor(DataflowPlanNodeVisitor[SqlDataSet]):
         )
         self._node_to_output_data_set: Dict[DataflowPlanNode, SqlDataSet] = _node_to_output_data_set or {}
         self._output_column_orderer = output_column_orderer
+        self._use_maxcompute_sql = use_maxcompute_sql
 
     def _next_unique_table_alias(self) -> str:
         """Return the next unique table alias to use in generating queries."""
@@ -218,6 +221,7 @@ class DataflowNodeToSqlSubqueryVisitor(DataflowPlanNodeVisitor[SqlDataSet]):
             semantic_manifest_lookup=self._semantic_manifest_lookup,
             output_column_orderer=self._output_column_orderer,
             _node_to_output_data_set=dict(self._node_to_output_data_set),
+            use_maxcompute_sql=self._use_maxcompute_sql,
         )
 
     # TODO: replace this with a dataflow plan node for cumulative metrics - SL-3324
@@ -256,9 +260,11 @@ class DataflowNodeToSqlSubqueryVisitor(DataflowPlanNodeVisitor[SqlDataSet]):
         time_spine_source = time_spine_sources[0]
         time_spine_base_granularity = ExpandedTimeGranularity.from_time_granularity(time_spine_source.base_granularity)
 
-        base_column_expr = SqlColumnReferenceExpression.from_column_reference(
+        base_column_expr: SqlExpressionNode = SqlColumnReferenceExpression.from_column_reference(
             table_alias=time_spine_table_alias, column_name=time_spine_source.base_column
         )
+        if self._use_maxcompute_sql:
+            base_column_expr = SqlCastToTimestampExpression.create(base_column_expr)
         select_columns: Tuple[SqlSelectColumn, ...] = ()
         for agg_time_dimension_spec in required_specs:
             column_alias = self._column_association_resolver.resolve_spec(agg_time_dimension_spec).column_name
@@ -326,6 +332,7 @@ class DataflowNodeToSqlSubqueryVisitor(DataflowPlanNodeVisitor[SqlDataSet]):
                     table_alias=time_spine_table_alias,
                     column_alias=time_spine_source.base_column,
                     time_range_constraint=time_range_constraint,
+                    cast_column_to_timestamp=self._use_maxcompute_sql,
                 )
                 if time_range_constraint
                 else None
@@ -1182,6 +1189,22 @@ class DataflowNodeToSqlSubqueryVisitor(DataflowPlanNodeVisitor[SqlDataSet]):
             time_range_constraint=node.time_range_constraint,
         )
 
+        if self._use_maxcompute_sql:
+            from metricflow.plan_conversion.to_sql_plan.maxcompute_partition import partition_predicate
+
+            partition_condition = partition_predicate(
+                lookup=self._semantic_manifest_lookup,
+                instance_set=from_data_set.instance_set,
+                time_instance=time_dimension_instance_for_metric_time,
+                constraint=node.time_range_constraint,
+                table_alias=from_data_set_alias,
+            )
+            if partition_condition is not None:
+                constrain_metric_time_column_condition = SqlLogicalExpression.create(
+                    operator=SqlLogicalOperator.AND,
+                    args=(constrain_metric_time_column_condition, partition_condition),
+                )
+
         output_instance_set = from_data_set.instance_set
         # Output columns should always follow the resolver format.
         output_instance_set = output_instance_set.transform(ChangeAssociatedColumns(self._column_association_resolver))
@@ -2008,7 +2031,10 @@ class DataflowNodeToSqlSubqueryVisitor(DataflowPlanNodeVisitor[SqlDataSet]):
 
     @staticmethod
     def _make_time_range_comparison_expr(
-        table_alias: str, column_alias: str, time_range_constraint: TimeRangeConstraint
+        table_alias: str,
+        column_alias: str,
+        time_range_constraint: TimeRangeConstraint,
+        cast_column_to_timestamp: bool = False,
     ) -> SqlExpressionNode:
         """Build an expression like "ds BETWEEN CAST('2020-01-01' AS TIMESTAMP) AND CAST('2020-01-02' AS TIMESTAMP).
 
@@ -2029,10 +2055,13 @@ class DataflowNodeToSqlSubqueryVisitor(DataflowPlanNodeVisitor[SqlDataSet]):
             ISO8601_PYTHON_FORMAT if constraint_uses_day_or_larger_grain else ISO8601_PYTHON_TS_FORMAT
         )
 
+        column_expr: SqlExpressionNode = SqlColumnReferenceExpression.create(
+            SqlColumnReference(table_alias=table_alias, column_name=column_alias)
+        )
+        if cast_column_to_timestamp:
+            column_expr = SqlCastToTimestampExpression.create(column_expr)
         return SqlBetweenExpression.create(
-            column_arg=SqlColumnReferenceExpression.create(
-                SqlColumnReference(table_alias=table_alias, column_name=column_alias)
-            ),
+            column_arg=column_expr,
             start_expr=SqlStringLiteralExpression.create(
                 literal_value=time_range_constraint.start_time.strftime(time_format_to_render),
             ),
