@@ -11,6 +11,7 @@ python -m pip install -r https://github.com/dingxin-tech/metricflow-maxcompute/r
 
 - [下载试用版](https://github.com/dingxin-tech/metricflow-maxcompute/releases)
 - [中文快速上手](scripts/maxcompute_trial/QUICKSTART.zh-CN.md)
+- [用官方 Agent Skill 从业务需求生成语义配置](scripts/maxcompute_trial/QUICKSTART.zh-CN.md#8-使用官方-agent-skill-生成语义配置)
 - [验收记录](scripts/maxcompute_trial/ACCEPTANCE.zh-CN.md)
 - [维护、CI 与发布](docs/maxcompute/MAINTENANCE.zh-CN.md)
 - [问题反馈](https://github.com/dingxin-tech/metricflow-maxcompute/issues)

@@ -3,6 +3,7 @@
 本试用版把 MetricFlow 指标定义编译为 MaxCompute SQL，并通过 dbt 连接执行。
 dbt 负责构建 SQL 数据模型，MetricFlow 负责依据语义定义规划指标查询。
 首次试用可先完成第 1～4 步，查看总量、时间分组和维表关联结果。
+希望由 AI 编写语义配置，可直接从第 8 节开始，并按其中指引完成安装和连接配置。
 
 本包基于 dbt-labs/metricflow 修改，版本带
 `+maxcompute.2` 标识。它尚不是 dbt Labs 官方发布的 MaxCompute 支持版本。
@@ -70,6 +71,12 @@ export MF_MAXCOMPUTE_TABLE_PREFIX="mf_trial_$(date +%Y%m%d%H%M%S)_$$"
 
 将尖括号占位符替换为实际值。Endpoint 按项目所在地域选择 HTTPS 地址，
 例如上海地域使用 `https://service.cn-shanghai.maxcompute.aliyun.com/api`。
+确认继承到当前终端的 Endpoint 也使用 HTTPS：
+
+```bash
+python -c "import os; from urllib.parse import urlsplit; assert urlsplit(os.environ['MAXCOMPUTE_ENDPOINT']).scheme == 'https', 'MAXCOMPUTE_ENDPOINT 必须使用 HTTPS'"
+```
+
 `example/profiles.yml` 从环境变量读取认证信息，
 使用 `maxcompute` adapter 和 UTC 会话时区。示例需要建表、写入和读取权限；自动验收
 还需要删除本轮测试表。请选择适合创建测试表的项目或 schema。
@@ -473,12 +480,349 @@ python -I verify_cli.py --live --output-root /tmp/mf-maxcompute-evidence
 并在结束时删除这十张表、检查前缀残留。日志、SQL、CSV、原生执行计划和报告
 写入指定的包外目录；凭据只从环境读取。
 
+## 8. 使用官方 Agent Skill 生成语义配置
+
+Agent Skill 是供 AI 编程工具读取的任务指导。dbt Labs 的
+[building-dbt-semantic-layer](https://github.com/dbt-labs/dbt-agent-skills/tree/main/skills/dbt/skills/building-dbt-semantic-layer)
+会指导 Agent 阅读模型、确定粒度、声明实体和指标，再执行验证。
+本节使用官方原版 Skill，无需修改或 fork；指标编译和 MaxCompute 执行仍由本试用版负责。
+安装 Skill 后，还需要为 AI 客户端配置可用的模型服务，并允许其读取项目和运行本地命令。
+
+本例先提供订单、客户、日期表三个 SQL 模型，再让 Agent 根据业务需求编写语义 YAML。
+2026-10-23 已在本页列出的 `.2` 试用环境中验证新版 YAML、7 项模型测试和 6 组云端指标查询。
+已有项目可继续沿用第 3 节的旧版 YAML；本节的新项目使用 Core 1.12 支持的新版格式，两种格式不要混写。
+
+### 8.1 准备独立示例项目
+
+先完成第 1 节的 Python 安装和第 2 节的凭据配置，在同一终端保持虚拟环境激活。
+本例需要已有 MaxCompute 项目的建表、写入和查询权限，在该云项目中创建带随机前缀的三张实验表。
+不需要新建 MaxCompute 云项目。Agent 安装命令另外需要本机已安装 Node.js（提供 `npx`）和 Git。
+
+在新的工作目录中，下载并解压
+[Agent 示例包](https://github.com/dingxin-tech/metricflow-maxcompute/releases/download/maxcompute-trial-20261022.2/maxcompute-agent-example.zip)：
+
+```bash
+mkdir mf-agent-workspace
+cd mf-agent-workspace
+curl --fail --location --output maxcompute-agent-example.zip https://github.com/dingxin-tech/metricflow-maxcompute/releases/download/maxcompute-trial-20261022.2/maxcompute-agent-example.zip
+python -m zipfile -e maxcompute-agent-example.zip .
+cd agent_example
+export DBT_PROJECT_DIR="$PWD"
+export DBT_PROFILES_DIR="$PWD"
+export MF_MAXCOMPUTE_TABLE_PREFIX="mf_agent_$(date +%Y%m%d%H%M%S)_$$"
+```
+
+也可以使用仓库中的 [agent_example/](agent_example/)；后续命令均在该 dbt 项目根目录执行。
+原有 `.tar.gz` 发行包保持发行时快照，本节新增示例通过上面的 ZIP 单独提供。
+
+```text
+agent_example/
+├── dbt_project.yml
+├── profiles.yml
+├── AGENT_PROMPT.zh-CN.md     # 完整业务需求，可直接提交给 Agent
+├── models/
+│   ├── orders.sql           # 8 笔订单，含状态、NULL 金额和未知客户
+│   ├── customers.sql        # 3 位客户及其地区
+│   └── time_spine.sql       # adapter 宏生成连续日期
+└── reference/
+    └── semantic.yml         # 已验收的生成结果，供对照
+```
+
+初始 `models/` 中没有语义配置。`reference/` 不在 dbt 的 `model-paths` 中，
+其中的参考答案不会参与解析，不会和 Agent 生成的配置重复。
+`dbt_project.yml`、`profiles.yml` 负责构建方式和连接参数；三个 SQL 文件决定实际数据。
+它们的作用与第 3 节相同，这次生成过程也不会由 dbt 自动猜测业务关系。
+
+订单输入的八条数据如下。完整 SQL 见 [models/orders.sql](agent_example/models/orders.sql)，
+客户表和日期表分别见 [models/customers.sql](agent_example/models/customers.sql)、
+[models/time_spine.sql](agent_example/models/time_spine.sql)。
+
+| order_id | customer_id | ordered_at（UTC） | amount | status |
+| --- | --- | --- | --- | --- |
+| 1 | 1 | 2026-01-31 23:30:00 | 120 | paid |
+| 2 | 2 | 2026-02-01 00:30:00 | 80 | paid |
+| 3 | 1 | 2026-02-01 12:00:00 | 50 | cancelled |
+| 4 | 1 | 2026-02-02 10:00:00 | 200 | paid |
+| 5 | 3 | 2026-02-02 11:00:00 | 40 | paid |
+| 6 | 2 | 2026-02-03 09:00:00 | NULL | paid |
+| 7 | 999 | 2026-02-03 10:00:00 | 60 | paid |
+| 8 | 3 | 2026-02-03 11:00:00 | 500 | refunded |
+
+客户 1、2、3 的地区分别为 east、west、south；客户 999 没有维表记录。
+日期表通过 `dbt.date_spine` 生成四天连续日期。`dbt run` 将这些输入构建为物理表，
+后续语义配置只声明它们的业务含义和关联，不改写上述实验数据。
+
+### 8.2 安装官方 Skill
+
+在 `agent_example/` 中执行下列命令，为 Codex 安装项目级 Skill：
+
+```bash
+npx --yes skills add dbt-labs/dbt-agent-skills --skill building-dbt-semantic-layer --agent codex --yes
+npx --yes skills list --agent codex
+```
+
+第二条命令的列表中应出现 `building-dbt-semantic-layer`。
+使用 Claude Code 时，将两条命令中的 `codex` 替换为 `claude-code`。
+其他客户端与安装方式参见 [dbt Labs 安装说明](https://github.com/dbt-labs/dbt-agent-skills#installation)。
+
+这是 AI 客户端的 Skill 安装，与第 1 节的 Python 包安装各有职责：前者提供建模指导，
+后者提供 `dbt`、`mf` 和 MaxCompute 执行能力。该建模路径无需接入 dbt Cloud 或 dbt MCP。
+在 AI 客户端中打开本节的 `agent_example/` 目录，再开启一个新会话，使其加载安装后的 Skill。
+若客户端尚未发现 Skill，按客户端要求重新加载或重启，并检查项目中的 Skill 目录。
+
+本次云端验收使用官方 Skill 提交
+`b8facde20b7a92c40ce3e6b86b71c4b92aa44040`；上面的命令安装上游当前版本。
+安装后保留 CLI 生成的版本锁定文件，可记录本项目实际采用的 Skill 来源。
+
+### 8.3 把业务需求交给 Agent
+
+让 Agent 使用与本终端相同的 Python 环境。若 AI 客户端无法继承终端环境，
+通过客户端的环境配置提供 Python 路径和凭据变量；不要把密钥粘贴到提示词中。
+
+可以让 Agent 读取 `AGENT_PROMPT.zh-CN.md`，也可以直接发送下面这份完整需求。
+这些是本实验明确指定的业务口径；接入真实数据时，需要业务负责人确认状态、退款、时间及分母的含义。
+
+```text
+使用官方 building-dbt-semantic-layer Skill，为当前 MaxCompute dbt 项目生成语义配置。
+先读取 models/ 下的 SQL、dbt_project.yml 和 profiles.yml，再根据以下需求生成
+models/semantic.yml。不要读取 reference/ 中的参考答案，也不要修改 SQL 中的实验数据。
+
+分析目标：查询已支付订单的营收、订单数、客单价，支持按日、按月和客户地区分组，
+以及月份和地区组合分组。
+
+业务口径：
+
+- orders 一行一笔订单，order_id 唯一且非空；customers 一行一个客户，customer_id 唯一且非空。
+- 订单通过 customer_id 对应客户；客户表只保存当前地区，不包含历史版本。
+- 仅 status = 'paid' 纳入指标，cancelled 和 refunded 均排除。
+- NULL 金额按零计入营收；对应已支付订单仍计入订单数。
+- 客单价 = 已支付营收 / 已支付订单数，不用忽略 NULL 的 AVG(amount)。
+- 以 ordered_at 为业务时间，源数据和会话时区均为 UTC。
+- 关联不到客户的订单保留，归入地区为 NULL 的分组。
+- 本实验没有 ds 的到达时间契约，不配置自动分区裁剪。
+
+实现要求：
+
+- 指标命名为 paid_revenue、paid_orders、paid_aov；客户实体名为 customer，地区维度为 region。
+- 使用当前已安装的试用版 dbt 和 mf，不升级或重新安装依赖。空项目使用 Core 1.12 支持的新版 YAML。
+- 将主键唯一性和非空检查写入 YAML；对日期表声明日粒度时间脊柱。
+- 状态过滤只引用已声明的维度；普通维表不需要添加订单度量。
+- 先解释实体、维度、时间和指标的对应关系，再展示配置修改。
+- 使用已有凭据环境变量执行 dbt parse、dbt run、dbt test、mf validate-configs，
+  再执行真实 mf query。缺少凭据或查询权限时报告具体阻塞，不把仅编译通过当成云端验证通过。
+- 不将访问密钥写入文件或回复。实验表由环境变量 MF_MAXCOMPUTE_TABLE_PREFIX 区分。
+- 对照预期核验：总营收 500、订单 6；1 月 120 / 1 单、2 月 380 / 5 单；
+  east 320 / 2 单、west 80 / 2 单、south 40 / 1 单、NULL 地区 60 / 1 单。
+```
+
+Agent 应产出 `models/semantic.yml`，并说明订单主实体、客户外实体、地区维度和默认业务时间。
+语义配置可以写入不同文件，但只有已声明的实体与维度才能供 MetricFlow 规划关联和分组。
+模型构建、解析、查询的分工仍与第 3 节一致。
+将生成的 YAML 与模型 SQL 一起纳入版本控制，后续需求变化时由 Agent 在已有声明上修改。
+
+### 8.4 对照完整的语义配置
+
+下面是本次已通过云端验证的新版 YAML。可逐项比较 Agent 输出；
+若只希望直接重现已验收结果，可以先备份自己的配置，再执行
+`cp reference/semantic.yml models/semantic.yml`。该命令会覆盖目标文件。
+
+```yaml
+version: 2
+
+models:
+  - name: orders
+    description: One row per order; UTC order time; paid-only metrics.
+    semantic_model:
+      enabled: true
+    agg_time_dimension: ordered_at
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+        entity:
+          type: primary
+          name: order
+      - name: customer_id
+        entity:
+          type: foreign
+          name: customer
+      - name: ordered_at
+        data_tests: [not_null]
+        granularity: day
+        dimension:
+          type: time
+      - name: status
+        dimension:
+          type: categorical
+    metrics:
+      - name: paid_revenue
+        description: Sum of paid amounts with NULL amounts treated as zero.
+        label: Paid revenue
+        type: simple
+        agg: sum
+        expr: coalesce(amount, 0)
+        filter: "{{ Dimension('order__status') }} = 'paid'"
+      - name: paid_orders
+        description: Paid order count including orders with NULL amount.
+        label: Paid orders
+        type: simple
+        agg: count
+        expr: order_id
+        filter: "{{ Dimension('order__status') }} = 'paid'"
+      - name: paid_aov
+        description: Paid revenue divided by paid orders.
+        label: Paid average order value
+        type: ratio
+        numerator: paid_revenue
+        denominator: paid_orders
+  - name: customers
+    description: One row per customer; current region, no historical versions.
+    semantic_model:
+      enabled: true
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+        entity:
+          type: primary
+          name: customer
+      - name: region
+        dimension:
+          type: categorical
+  - name: time_spine
+    description: Contiguous daily calendar for the experiment.
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        granularity: day
+        data_tests: [unique, not_null]
+```
+
+这份配置按下面的顺序组织业务含义：
+
+| 配置 | 作用 |
+| --- | --- |
+| 模型上的 `semantic_model.enabled` | 将该 dbt 模型暴露为语义模型 |
+| 列上的 `entity` | `order_id` 标识订单；订单侧与客户侧的同名 `customer` 实体建立关联路径 |
+| 列上的 `dimension` | 声明可用于过滤的订单状态、可分组的地区和时间 |
+| 模型上的 `agg_time_dimension` | 指定 `ordered_at` 为订单指标的默认业务时间 |
+| `paid_revenue` | 对 `coalesce(amount, 0)` 求和，只纳入已支付订单 |
+| `paid_orders` | 对订单 ID 计数，只纳入已支付订单；NULL 金额订单仍计数 |
+| `paid_aov` | 两个已定义指标相除，分母由业务口径确定 |
+| `data_tests` | 为主键和时间列添加非空、唯一性等数据检查 |
+| 日期表的 `time_spine` | 登记日粒度日历，实际日期仍由对应 SQL 构建 |
+
+`customers` 只有实体和维度，不需要人为添加订单度量或默认订单时间。
+普通指标查询按需关联客户表，`dbt run` 构建的订单表仍保持一行一笔订单。
+
+### 8.5 构建并查询
+
+Agent 完成修改后，在同一个项目目录执行下列命令。即使 Agent 已执行，也应查看其日志和结果：
+
+```bash
+dbt parse
+dbt run
+dbt test
+mf validate-configs
+```
+
+预期构建三张表、7 项数据测试通过，语义配置和云端验证没有错误。
+`mf validate-configs` 此处不加 `--skip-dw`；修改 YAML 后要重新 `dbt parse`，避免查询旧 manifest。
+
+然后执行六组真实查询：
+
+```bash
+mf query --metrics paid_revenue,paid_orders,paid_aov
+mf query --metrics paid_revenue,paid_orders,paid_aov --group-by metric_time__day
+mf query --metrics paid_revenue,paid_orders,paid_aov --group-by metric_time__month
+mf query --metrics paid_revenue,paid_orders,paid_aov --group-by customer__region
+mf query --metrics paid_revenue,paid_orders,paid_aov --group-by metric_time__month,customer__region
+mf query --metrics paid_revenue,paid_orders,paid_aov --group-by metric_time__day --start-time 2026-02-02 --end-time 2026-02-02
+```
+
+不带分组的预期结果为：
+
+| paid_revenue | paid_orders | paid_aov |
+| --- | --- | --- |
+| 500 | 6 | 83.33333333333333 |
+
+分组查询可以直接根据八条订单手工推导：
+
+| 查询 | 分组键 | 营收 | 订单数 | 客单价 |
+| --- | --- | --- | --- | --- |
+| 按日 | 2026-01-31 | 120 | 1 | 120 |
+| 按日 | 2026-02-01 | 80 | 1 | 80 |
+| 按日 | 2026-02-02 | 240 | 2 | 120 |
+| 按日 | 2026-02-03 | 60 | 2 | 30 |
+| 按月 | 2026-01 | 120 | 1 | 120 |
+| 按月 | 2026-02 | 380 | 5 | 76 |
+| 按地区 | east | 320 | 2 | 160 |
+| 按地区 | west | 80 | 2 | 40 |
+| 按地区 | south | 40 | 1 | 40 |
+| 按地区 | NULL | 60 | 1 | 60 |
+
+“月份＋地区”应返回五组：1 月 east 为 120 / 1 单；
+2 月 east、west、south、NULL 分别为 200 / 1、80 / 2、40 / 1、60 / 1。
+日期范围查询只返回 2026-02-02 的 240 / 2 单。
+CSV 中 NULL 地区输出为空单元格，时间列可能带 `00:00:00`。
+
+本次六组查询均与独立云端 SQL 对账。例如，在 MaxCompute SQL 客户端中执行以下基准查询，
+将 `<本轮前缀>` 替换为本终端的 `MF_MAXCOMPUTE_TABLE_PREFIX`，并使用同一项目与 schema：
+
+```sql
+SELECT
+    c.region AS customer__region,
+    SUM(COALESCE(o.amount, 0)) AS paid_revenue,
+    COUNT(o.order_id) AS paid_orders,
+    SUM(COALESCE(o.amount, 0)) / COUNT(o.order_id) AS paid_aov
+FROM `<本轮前缀>_orders` o
+LEFT JOIN `<本轮前缀>_customers` c
+    ON o.customer_id = c.customer_id
+WHERE o.status = 'paid'
+GROUP BY c.region;
+```
+
+其中 999 号客户没有维表记录，60 元订单应保留在 NULL 地区组；金额为 NULL 的已支付订单
+仍计入 west 的两笔订单。若分组后总额变化，先检查实体唯一性、关联条件和业务过滤条件。
+
+### 8.6 MaxCompute 注意事项
+
+| 注意事项 | 本例做法 |
+| --- | --- |
+| Python 执行环境 | 使用第 1 节的配套试用包，避免 Agent 用系统 Python 或覆盖安装上游包 |
+| Endpoint | 检查实际环境变量使用同地域 HTTPS 地址，尤其注意终端继承的旧 HTTP 配置 |
+| 新旧 YAML | 新项目可使用本节已验收的新版格式；已有项目沿用其格式，不要求迁移 |
+| 日期函数 | 使用 adapter 宏；官方参考 SQL 中的原生 DATEADD 参数顺序需按 MaxCompute 调整 |
+| 时区 | 本例源时间和会话均为 UTC；实际业务需明确时间字段和时区，不能仅修改显示标签 |
+| 分区裁剪 | 本例没有 ds 映射；需要裁剪时按第 5 节声明时区、提前和迟到上限 |
+| 验证范围 | `dbt parse` 检查声明；`--explain` 检查编译；实际 `mf query` 与业务对账检查云端结果 |
+
+官方日期表参考示例中的 `dateadd(year, -5, current_date())` 在本次云端探针中报
+`ODPS-0130071`（无法解析列 `year`）。MaxCompute 原生写法为：
+
+```sql
+SELECT DATEADD(CURRENT_DATE(), -5, 'year');
+```
+
+在 dbt 模型中，优先让 adapter 处理参数和方言：
+
+```sql
+SELECT {{ dbt.dateadd('year', -5, 'current_date()') }} AS five_years_ago;
+```
+
+本例日期表使用 `dbt.date_spine`，生成 2026-01-31 至 2026-02-03 四天日历。
+实际业务需扩大日期范围以覆盖查询窗口，避免直接照搬这四天数据。
+第一次云端日期表构建曾遇到连接重置，原样重试 `dbt run --select time_spine` 后成功；
+发生类似错误时先区分传输错误与 SQL 报错，只重跑受影响的实验模型。
+
+试用完毕后，仅清理本轮前缀对应的三张实验表。配置已设置一天生命周期；
+源 SQL、生成的 YAML 和查询结果可留在本地用于后续对照。
+
 ## 常见问题与支持边界
 
 - 找不到 manifest：在同一项目执行 `dbt parse`，确保存在 `target/semantic_manifest.json`。
   当前读取路径固定为默认 `target`；不要为试用项目改用自定义 target-path。
 - VECTOR 元数据解析报错：检查 `python -m pip show pyodps`，确认使用本试用环境的 0.13.2。
-- HTTP 连接被重置：使用项目地域对应的 HTTPS Endpoint。
+- HTTP 连接被重置：先确认使用项目地域对应的 HTTPS Endpoint；若仍偶发重置，检查网络并仅重跑失败的实验模型。
 - 前日偏移缺少第一天：上游默认 INNER 时间脊柱关联，没有匹配前日数据的日期会被排除。
 - 开启映射仍全扫：使用结构化 `--start-time` / `--end-time`；原始 SQL `--where` 字符串
   不会被解析成自动裁剪范围。用 MaxCompute 原生 EXPLAIN 的 `Data source` 核对实际分区。

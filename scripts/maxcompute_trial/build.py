@@ -88,6 +88,7 @@ def assemble(destination: Path, hatch: str) -> Path:
     example = destination / "example"
     shutil.copytree(Path(__file__).parent / "example", example)
     shutil.copy2(validation / "profiles.yml", example / "profiles.yml")
+    shutil.copytree(Path(__file__).parent / "agent_example", destination / "agent_example")
     source_commit = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, text=True, capture_output=True
     ).stdout.strip()

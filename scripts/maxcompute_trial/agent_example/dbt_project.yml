@@ -1,0 +1,11 @@
+name: mf_maxcompute_agent_example
+version: '1.0'
+config-version: 2
+profile: mf_maxcompute_agent_example
+model-paths: [models]
+vars:
+  table_prefix: "{{ env_var('MF_MAXCOMPUTE_TABLE_PREFIX') }}"
+models:
+  mf_maxcompute_agent_example:
+    +materialized: table
+    +lifecycle: 1
