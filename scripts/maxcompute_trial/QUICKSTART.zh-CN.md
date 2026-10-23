@@ -25,24 +25,35 @@ Windows 尚未列入验收范围。`sources/` 目录附有两个源码发行包�
 
 ## 1. 安装
 
-从 [GitHub Releases](https://github.com/dingxin-tech/metricflow-maxcompute/releases) 下载成套 `.tar.gz` 和同名 `.sha256`，
-在 Linux 执行 `sha256sum --check *.tar.gz.sha256`（macOS 使用 `shasum -a 256 --check *.tar.gz.sha256`）。
-准备 Python 3.12，解压试用包。在新的终端进入解压目录，执行以下命令，
-避免源码开发环境的 Python 路径覆盖已安装的包：
+准备一个 Python 3.12 虚拟环境，在该环境中执行一条命令即可：
 
 ```bash
-unset PYTHONPATH PYTHONHOME
-python3.12 install.py --venv "$HOME/.venvs/mf-maxcompute-trial"
-source "$HOME/.venvs/mf-maxcompute-trial/bin/activate"
-python -m pip check
-mf --version
-dbt --version
+python -m pip install -r https://github.com/dingxin-tech/metricflow-maxcompute/releases/download/maxcompute-trial-20261022.2/requirements.txt
 ```
 
-安装目录必须尚不存在，安装器不会覆盖旧环境。安装前会校验 SHA256，安装后检查
-核心和 CLI 版本配套、依赖一致性，以及模块确实来自该虚拟环境。
-若需要内网镜像，使用标准的 `PIP_INDEX_URL` 等 pip 配置；不要把镜像或云凭据写入本包。
-本试用版已验证 Python 3.12；其他 Python 版本尚未列入交付验收范围。
+这条命令会安装配套的 MetricFlow 核心、`mf` CLI、dbt-maxcompute 和 PyODPS，
+同时使用已验收的依赖版本。两个 fork wheel 的下载带 SHA256 校验，无需手动下载、解压安装包或运行安装器。
+安装完成后，当前虚拟环境中即可使用 `mf` 和 `dbt` 命令；连接信息按第 2 节配置。
+当前通过 GitHub Release 分发，尚未发布为可通过包名安装的 PyPI 项目。
+
+如果还没有虚拟环境，先执行一次下面的准备命令，再运行上面的安装命令：
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+```
+
+使用自己的 dbt 项目时，安装后可以直接接入，见第 6 节。
+要运行本文第 3～5 节的示例，则从 [GitHub Release](https://github.com/dingxin-tech/metricflow-maxcompute/releases/tag/maxcompute-trial-20261022.2)
+下载完整 `.tar.gz` 试用包并解压，使用其中的 `example/` 目录；已通过 pip 安装后，无需再运行包内安装器。
+
+完整试用包还保留 `install.py`，适合需要自动创建新虚拟环境并校验整包文件的用户。
+如果选择该方式，先使用同名 `.sha256` 校验压缩包，再解压，执行
+`python3.12 install.py --venv "$HOME/.venvs/mf-maxcompute-trial"` 并激活该环境即可。
+安装器要求目标目录尚不存在；两种方式都安装同一套 wheel 和依赖版本。
+
+请在独立虚拟环境中使用，避免与官方 MetricFlow 包混装。第三方依赖仍需从 Python 包索引下载；
+若需要内网镜像，可使用标准的 `PIP_INDEX_URL` 配置，GitHub Release 地址也需可访问。
+本试用版已验证 Python 3.12，其他 Python 版本尚未列入交付验收范围。
 
 ## 2. 配置 MaxCompute
 

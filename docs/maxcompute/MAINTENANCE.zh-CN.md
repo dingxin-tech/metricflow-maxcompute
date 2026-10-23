@@ -48,6 +48,9 @@ PR 必须检查方言 SQL、分区映射、时区与迟到数据边界，以及�
 
 首次发行可由维护者下载 CI 产物，在本地 Linux 容器中注入运行时凭据进行完整验收，
 通过后将同一份产物上传到 GitHub prerelease；记录 CI 链接、平台和验收摘要。
+使用 `scripts/maxcompute_trial/prepare_pip.py` 从该包生成并发布配套 wheel、`constraints.txt`
+和 `requirements.txt`，让用户通过 `pip install -r <Release requirements 地址>` 安装。
+现有归档包保持不变，单独提供的 wheel 必须与归档包中的字节一致。
 云端 Environment 未配置前，CI 的无凭据验证仍可运行，云端及自动发布需要先完成配置。
 
 ## 同步上游

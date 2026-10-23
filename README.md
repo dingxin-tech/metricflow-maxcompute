@@ -3,6 +3,12 @@
 本仓库是 [dbt-labs/metricflow](https://github.com/dbt-labs/metricflow) 的 MaxCompute 适配 fork，由 dingxin-tech 维护。
 它将 dbt 项目中的指标定义编译为 MaxCompute SQL，通过 dbt-maxcompute 执行。
 
+在 Python 3.12 虚拟环境中，一条命令安装：
+
+```bash
+python -m pip install -r https://github.com/dingxin-tech/metricflow-maxcompute/releases/download/maxcompute-trial-20261022.2/requirements.txt
+```
+
 - [下载试用版](https://github.com/dingxin-tech/metricflow-maxcompute/releases)
 - [中文快速上手](scripts/maxcompute_trial/QUICKSTART.zh-CN.md)
 - [验收记录](scripts/maxcompute_trial/ACCEPTANCE.zh-CN.md)

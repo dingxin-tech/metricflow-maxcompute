@@ -111,13 +111,29 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: maxcompute-trial
           path: delivery
+      - name: Prepare one-command pip installation
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          python scripts/maxcompute_trial/prepare_pip.py --archive delivery/metricflow-maxcompute-trial.tar.gz --release-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG" --output pip-assets
       - name: Publish tested artifact
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          gh release create "$RELEASE_TAG" delivery/*.tar.gz* --target "$GITHUB_SHA" --prerelease --title "$RELEASE_TAG" --notes-file docs/maxcompute/RELEASE.zh-CN.md
+          gh release create "$RELEASE_TAG" delivery/*.tar.gz* pip-assets/* --target "$GITHUB_SHA" --prerelease --title "$RELEASE_TAG" --notes-file docs/maxcompute/RELEASE.zh-CN.md
+      - name: Verify public pip installation
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          python -m venv "$RUNNER_TEMP/pip-consumer"
+          "$RUNNER_TEMP/pip-consumer/bin/python" -m pip install -r "https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/requirements.txt"
+          "$RUNNER_TEMP/pip-consumer/bin/python" -m pip check
+          "$RUNNER_TEMP/pip-consumer/bin/mf" --version
