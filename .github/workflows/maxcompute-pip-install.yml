@@ -1,0 +1,55 @@
+name: MaxCompute public pip install
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published trial release tag
+        type: string
+        required: true
+        default: maxcompute-trial-20261022.2
+
+permissions:
+  contents: read
+
+jobs:
+  public-install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+    steps:
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Install as an anonymous consumer
+        run: |
+          [[ "$RELEASE_TAG" =~ ^maxcompute-trial-[0-9]{8}\.[0-9]+$ ]]
+          python -m venv "$RUNNER_TEMP/consumer"
+          "$RUNNER_TEMP/consumer/bin/python" -m pip install -r "https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/requirements.txt"
+          "$RUNNER_TEMP/consumer/bin/python" -m pip check
+          "$RUNNER_TEMP/consumer/bin/mf" --version
+          "$RUNNER_TEMP/consumer/bin/dbt" --version
+      - name: Check paired packages came from this release
+        run: |
+          "$RUNNER_TEMP/consumer/bin/python" -I - <<'PY'
+          import json
+          import os
+          import sys
+          from importlib import import_module
+          from importlib.metadata import distribution
+          from pathlib import Path
+
+          result = {}
+          for package, module in (("metricflow", "metricflow"), ("dbt-metricflow", "dbt_metricflow")):
+              info = distribution(package)
+              origin = json.loads(info.read_text("direct_url.json"))
+              assert f"/download/{os.environ['RELEASE_TAG']}/" in origin["url"], origin
+              assert "+maxcompute." in info.version, info.version
+              location = Path(import_module(module).__file__).resolve()
+              assert location.is_relative_to(Path(sys.prefix)), location
+              result[package] = {"version": info.version, "module": str(location)}
+          print(json.dumps({"status": "PASS", "packages": result}, indent=2))
+          PY
