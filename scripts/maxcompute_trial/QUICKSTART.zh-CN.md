@@ -63,7 +63,275 @@ export MF_MAXCOMPUTE_TABLE_PREFIX="mf_trial_$(date +%Y%m%d%H%M%S)_$$"
 使用 `maxcompute` adapter 和 UTC 会话时区。示例需要建表、写入和读取权限；自动验收
 还需要删除本轮测试表。请选择适合创建测试表的项目或 schema。
 
-## 3. 构建三个示例表
+## 3. 理解并构建三个示例表
+
+本例先构建三张 MaxCompute 物理表，再用 YAML 声明它们的业务含义。
+**SQL、表的粒度、实体关系和指标口径都由项目作者编写；dbt 解析这些声明并构建表，
+MetricFlow 按声明规划指标查询。** dbt 和 MetricFlow 都不会根据 `customer_id` 这样的字段名自动推断业务关系。
+
+### 3.1 文件分别负责什么
+
+解压后的 `example/` 是一个完整的 dbt 项目，相关文件如下：
+
+```text
+example/
+├── dbt_project.yml         # 项目名、模型目录、物理表构建方式和表名前缀
+├── profiles.yml            # MaxCompute 连接参数，从第 2 节的环境变量读取
+└── models/
+    ├── orders.sql          # 生成订单数据
+    ├── customers.sql       # 生成客户数据
+    ├── time_spine.sql      # 生成连续日期
+    └── semantic.yml        # 绑定物理模型，声明实体、维度、度量、指标及时间脊柱
+```
+
+本例的输入数据直接写在三个 SQL 文件的 `SELECT ... UNION ALL ...` 中，
+运行时无需预先准备业务表或导入 CSV。真实项目通常将这些 SQL 改成读取已有业务数据的查询。
+
+| SQL 文件 / dbt 模型名 | 最终物理表名 | 一行代表什么 | 示例数据规模 |
+| --- | --- | --- | --- |
+| [models/orders.sql](example/models/orders.sql) / `orders` | `<前缀>_orders` | 一笔订单，包含客户、下单时间、金额和分区日期 | 6 笔订单，5 个 `ds` 分区 |
+| [models/customers.sql](example/models/customers.sql) / `customers` | `<前缀>_customers` | 一个客户及其区域 | 3 个客户 |
+| [models/time_spine.sql](example/models/time_spine.sql) / `time_spine` | `<前缀>_time_spine` | 一天，日期列为 `date_day` | 2026-01-31 至 2026-02-03，共 4 天 |
+
+这里的“前缀”来自第 2 节的 `MF_MAXCOMPUTE_TABLE_PREFIX`。例如它取 `mf_demo` 时，
+三张表就叫 `mf_demo_orders`、`mf_demo_customers`、`mf_demo_time_spine`，
+落在 `profiles.yml` 指定的 MaxCompute 项目和 schema 中。
+
+### 3.2 dbt 如何把 SQL 文件变成物理表
+
+`dbt_project.yml` 内容如下：
+
+```yaml
+name: mf_maxcompute_phase1
+version: '1.0'
+config-version: 2
+profile: mf_maxcompute_phase1
+model-paths: [models]
+vars:
+  table_prefix: "{{ env_var('MF_MAXCOMPUTE_TABLE_PREFIX') }}"
+models:
+  mf_maxcompute_phase1:
+    +materialized: table
+    +lifecycle: 1
+```
+
+`model-paths: [models]` 告诉 dbt 去哪里找模型。`+materialized: table` 表示将该项目模型的
+查询结果保存为物理表，`+lifecycle: 1` 为这些示例表设置一天生命周期。
+`table_prefix` 则把环境变量传给各 SQL 文件中的表别名配置。
+
+以 `models/orders.sql` 为例，以下保留了文件中的全部六条数据，仅调整换行：
+
+```sql
+{{ config(
+    alias=var('table_prefix') ~ '_orders',
+    partition_by={"fields": "ds", "data_types": "string"}
+) }}
+
+select
+    1 as order_id, 1 as customer_id,
+    timestamp '2026-01-31 23:59:00' as ordered_at,
+    cast(10 as decimal(18,2)) as amount, '2026-02-01' as ds
+union all
+select 2, 1, timestamp '2026-02-01 00:01:00', 20, '2026-01-31'
+union all
+select 3, 2, timestamp '2026-02-01 13:00:00', 30, '2026-02-02'
+union all
+select 4, 999, timestamp '2026-02-02 14:00:00', 40, '2026-02-03'
+union all
+select 5, cast(null as bigint), timestamp '2026-02-03 15:00:00', 0, '2026-02-03'
+union all
+select 6, 2, timestamp '2026-02-03 16:00:00', cast(null as decimal(18,2)), '2026-02-04'
+```
+
+开头的 `config(...)` 是 dbt 的模板配置：`alias` 决定最终物理表名，`partition_by`
+要求按字符串列 `ds` 建分区。后面的 SQL 决定表中的行和列。
+执行 `dbt run` 时，dbt 渲染模板，dbt-maxcompute adapter 将查询包装为 MaxCompute 的建表、写入等语句并执行。
+
+`models/customers.sql` 定义三位客户：
+
+```sql
+{{ config(alias=var('table_prefix') ~ '_customers') }}
+
+select 1 as customer_id, 'east' as region
+union all
+select 2, 'west'
+union all
+select 3, 'unused'
+```
+
+`models/time_spine.sql` 定义四个连续日期：
+
+```sql
+{{ config(alias=var('table_prefix') ~ '_time_spine') }}
+
+select date '2026-01-31' as date_day
+union all
+select date '2026-02-01'
+union all
+select date '2026-02-02'
+union all
+select date '2026-02-03'
+```
+
+这三个 SQL 文件互不引用，因此 dbt 的模型构建依赖中没有订单到客户的关联。
+`orders` 与 `customers` 的业务关联将在下一节的语义配置中声明；`dbt run` 不会把两张表预先 JOIN 成一张宽表。
+时间脊柱的日期也由作者在 SQL 中提供，dbt 不会自动补出示例以外的日期。
+
+### 3.3 作者如何组织这三张表的语义
+
+`models/semantic.yml` 将物理数据映射为可查询的业务概念。文件名可以自行命名，
+本例用 `semantic.yml` 集中保存；其中的 `models`、`semantic_models`、`metrics` 配置各有职责。
+下面展示本例配置，自动分区裁剪的 `config.meta` 留在第 5 节解释：
+
+```yaml
+version: 2
+
+models:
+  - name: time_spine
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        granularity: day
+
+semantic_models:
+  - name: orders
+    model: ref('orders')
+    # 分区映射 config.meta 的配置见第 5 节，此处省略。
+    defaults:
+      agg_time_dimension: ordered_at
+    entities:
+      - name: order
+        type: primary
+        expr: order_id
+      - name: customer
+        type: foreign
+        expr: customer_id
+    dimensions:
+      - name: ordered_at
+        type: time
+        type_params:
+          time_granularity: day
+      - name: ds
+        type: categorical
+        is_partition: true
+    measures:
+      - name: revenue
+        agg: sum
+        expr: amount
+      - name: order_count
+        agg: count
+        expr: order_id
+      - name: customer_count
+        agg: count_distinct
+        expr: customer_id
+  - name: customers
+    model: ref('customers')
+    entities:
+      - name: customer
+        type: primary
+        expr: customer_id
+    dimensions:
+      - name: region
+        type: categorical
+
+metrics:
+  - name: revenue
+    label: Revenue
+    type: simple
+    type_params:
+      measure: revenue
+  - name: order_count
+    label: Orders
+    type: simple
+    type_params:
+      measure: order_count
+  - name: customer_count
+    label: Customers
+    type: simple
+    type_params:
+      measure: customer_count
+  - name: average_order_value
+    label: Average order value
+    type: ratio
+    type_params:
+      numerator: revenue
+      denominator: order_count
+```
+
+阅读这份配置时，可以沿着下面的对应关系理解：
+
+| 配置 | 本例含义 | 由谁决定 |
+| --- | --- | --- |
+| `model: ref('orders')` | 订单语义模型读取 dbt 的 `orders` 模型所对应的物理表 | 作者显式绑定，dbt 解析最终表名 |
+| `entities` | `order_id` 标识订单；两个模型通过同名实体 `customer` 连接 | 作者声明主实体、外实体及其字段 |
+| `dimensions` | `ordered_at` 可按时间分组，`region` 可按客户区域分组；`ds` 是分区维度 | 作者选择可供分析的字段和类型 |
+| `measures` | `amount` 求和、`order_id` 计数、`customer_id` 去重计数 | 作者定义底层聚合口径 |
+| `metrics` | 将度量暴露为查询指标，并定义平均订单金额等指标组合 | 作者定义业务指标；MetricFlow 编译查询 |
+| `models` 下的 `time_spine` 配置 | 指定 `time_spine` 模型中的 `date_day` 是日粒度的标准时间列 | 作者声明日期表及其粒度 |
+
+`ref('orders')` 引用的是 SQL 文件对应的 **dbt 模型名**，所以即使物理表名带有前缀，这里的
+引用仍然写 `orders`。本例恰好也把语义模型命名为 `orders`，实际绑定关系由 `model: ref(...)` 指定。
+
+实体关联的关键是两边都声明了名为 `customer` 的实体：订单侧为 `foreign`，客户侧为 `primary`，
+分别映射到各自的 `customer_id` 列。MetricFlow 据此建立可用的关联路径；仅仅两张表都有
+`customer_id` 字段，还不足以建立这个语义关联。声明 `primary` 也不等于给数据库加上主键约束，
+作者仍需保证客户表的该键唯一，避免关联后放大订单金额。
+
+`defaults.agg_time_dimension: ordered_at` 指定订单度量的默认业务时间。因此
+`metric_time__month` 表示按下单时间的月份分组，`--start-time` / `--end-time` 也按该业务时间过滤。
+`ds` 则是用于物理分区的到达日期，两者可以跨日；第 5 节再声明它们之间可用于裁剪的映射。
+
+时间脊柱在 YAML 顶部的 `models` 中登记，本例没有为它定义第三个 `semantic_model`，
+也没有把它声明成订单实体的外键目标。它为需要时间脊柱的累计、偏移等查询提供连续日期；
+普通营收总量或按客户区域分组，无需为了凑齐三张表而关联日期表。
+本例仅提供四天日期，接入真实项目时应提供覆盖查询日期及窗口所需范围的连续日历。
+
+这些口径都可以由作者修改。例如 `average_order_value` 被定义为 `revenue / order_count`，
+本例结果是 `100 / 6`；由于第六笔订单的金额为 NULL，直接计算 `AVG(amount)` 得到的却是 `100 / 5`。
+“平均订单金额”的分母取哪个口径，需要业务定义，dbt 不会自动替作者选择。
+
+### 3.4 用一次区域营收查询串起整条链路
+
+假设用户发出下面的查询：
+
+```bash
+mf query --metrics revenue,order_count --group-by customer__region
+```
+
+MetricFlow 从指标定义找到 `revenue → SUM(amount)`、`order_count → COUNT(order_id)`，
+确定数据来自订单模型。`customer__region` 中的 `customer` 指定实体路径，`region` 指定客户侧维度。
+规划器沿已声明的 `customer` 关系找到客户模型，再生成关联与分组聚合 SQL。
+
+为便于理解，等价查询可简化为下面的形式；其中 `<前缀>` 是说明用占位符，实际编译 SQL
+会展开完整项目、schema、表名，并可能包含子查询和优化后的表达式：
+
+```sql
+select
+    c.region as customer__region,
+    sum(o.amount) as revenue,
+    count(o.order_id) as order_count
+from `<前缀>_orders` o
+left join `<前缀>_customers` c
+    on o.customer_id = c.customer_id
+group by c.region
+```
+
+从上面的示例数据即可手工推导结果，无需先运行命令：
+
+| customer__region | revenue | order_count | 来源 |
+| --- | --- | --- | --- |
+| east | 30 | 2 | 客户 1 的两笔订单：10 + 20 |
+| west | 30 | 2 | 客户 2 的两笔订单：30 + NULL；求和忽略 NULL，订单仍计数 |
+| NULL | 40 | 2 | 客户 999 无维表记录，另一笔订单的客户 ID 为 NULL；金额为 40 + 0 |
+
+客户 3 的 `unused` 区域没有订单，因此这次从订单出发的查询不会生成对应结果行。
+本例的 `customer_count` 在订单侧对客户 ID 去重，结果为 3（1、2、999），
+并不表示维表中有三位客户实际下单。这些数据特意保留了未匹配客户和 NULL，以展示指标口径与关联行为。
+
+### 3.5 执行构建并生成查询所需的语义文件
+
+前面几节描述的是项目作者已经写好的文件。使用示例时，执行以下命令即可让工具处理这些文件：
 
 ```bash
 cd example
@@ -75,12 +343,35 @@ dbt parse
 mf list metrics
 ```
 
-`dbt run` 创建订单事实表、客户维表和时间脊柱。表名使用上一步的独立前缀，
-生命周期为一天。表在生命周期清理前保留，便于重复查询；需要时可按前缀核对后删除
-`<前缀>_orders`、`<前缀>_customers`、`<前缀>_time_spine` 三张表。
+| 命令 | 输入 | 本步骤完成什么 |
+| --- | --- | --- |
+| `dbt debug` | `dbt_project.yml`、`profiles.yml` 和环境变量 | 检查项目配置与连接 |
+| `dbt run` | 三个 SQL 模型及构建配置 | 在 MaxCompute 中创建、写入三张物理表 |
+| `dbt parse` | 项目 SQL 与 YAML 定义 | 解析项目，生成或更新 `target/semantic_manifest.json`，此命令本身不建表 |
+| `mf list metrics` | `target/semantic_manifest.json` | 列出 `revenue`、`order_count`、`customer_count`、`average_order_value` 四个可查询指标 |
+| `mf query ...` | 语义 manifest 和用户请求 | MetricFlow 规划 SQL，经 adapter 在 MaxCompute 中执行并返回结果 |
 
-`dbt parse` 生成 `target/semantic_manifest.json`，`mf` 据此读取模型、实体、维度和
-指标定义，生成 MaxCompute SQL，再通过同一 dbt adapter 执行。
+`semantic_manifest.json` 是从作者声明编译出的语义描述文件，包含模型绑定、实体、维度、度量、
+指标和时间脊柱等元数据。它不保存订单数据，也不会额外创建“语义表”。
+`mf` 消费这个描述文件，查询时再读取 MaxCompute 中的物理数据。
+
+```mermaid
+flowchart TD
+    SQL["models 下的三个 SQL 文件"] --> RUN["dbt run + dbt-maxcompute"]
+    RUN --> TABLES["MaxCompute 中的三张物理表"]
+    YAML["作者编写 semantic.yml"] --> PARSE["dbt parse"]
+    PARSE --> MANIFEST["target/semantic_manifest.json"]
+    MANIFEST --> MF["mf query：MetricFlow 规划 SQL"]
+    MF --> EXEC["MaxCompute 执行指标 SQL"]
+    TABLES --> EXEC
+```
+
+上图分别展示构建数据表和解析语义声明两条路径；表已存在并不代表业务语义已经定义。
+修改指标口径或实体关系后，需要重新解析项目、更新 manifest。
+修改 SQL 数据模型后，则需重新构建相关物理表，再更新项目解析结果。
+
+这三张表是短期试用数据，配置了一天生命周期。需要主动清理时，按本轮前缀核对后删除
+`<前缀>_orders`、`<前缀>_customers`、`<前缀>_time_spine`，避免删除其他试用或业务表。
 
 ## 4. 查询指标
 
@@ -143,9 +434,13 @@ ds >= '2026-02-01' AND ds <= '2026-02-04'
 
 ## 6. 接入自己的 dbt 项目
 
-保留自己的模型和 `profiles.yml`。在语义 YAML 中用 `model: ref('事实模型名')`
-绑定模型，以主键/外键实体连接维表，再声明维度、度量和指标。可从示例中复制
-`orders`、`customers` 和 `revenue` 的定义，替换字段名。
+保留自己的模型和 `profiles.yml`。先明确事实表的一行代表什么、业务时间取哪一列，
+以及维表实体键是否唯一。再按第 3.3 节的结构编写语义 YAML：用 `model: ref('事实模型名')`
+绑定已有 dbt 模型，声明实体路径、可分组的维度、聚合度量和对外指标。可从本例的
+`orders`、`customers` 和 `revenue` 定义开始修改。
+
+已有 dbt SQL 模型可以复用，但实体关联和指标口径仍需作者显式定义。
+新增语义 YAML 本身不会复制业务数据、构建新的宽表或自动校验实体键的唯一性。
 
 执行 `dbt run` 构建模型，再执行 `dbt parse` 更新语义 manifest。在项目根目录运行
 `mf`，或通过 `DBT_PROJECT_DIR`、`DBT_PROFILES_DIR` 指向项目和 profile 目录。
